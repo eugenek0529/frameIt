@@ -7,7 +7,13 @@ function App() {
   return (
     <div 
       className="min-h-screen flex flex-col bg-gradient-to-b from-blue-100 to-white"
-      style={{ backgroundImage: "url('blue-background.png')"}}>
+      style={{
+        backgroundImage: "url('blue-background.png')",
+        backgroundSize: 'cover',       // Cover the entire container
+        backgroundRepeat: 'no-repeat', // Prevent image repetition
+        backgroundPosition: 'center',   // Center the image
+      }}
+      >
       <Navbar />
 
       <header className="flex-grow flex items-center justify-center pt-20 md:pt-32"> {/* Removed md:justify-start */}

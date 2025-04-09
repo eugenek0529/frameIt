@@ -7,13 +7,13 @@ function Hero() {
           FrameIt
         </h1>
         <p className="text-lg text-blue-700 mb-6">
-          Capture Every Perspective of Your Event
+          See every angle of your event, shared by attendees.
         </p>
         <div className="flex justify-center mt-14 space-x-4">
-          <button className="bg-blue-600 text-white px-6 py-2 rounded-full font-medium shadow-md hover:bg-blue-700 transform transition hover:scale-105">
+          <button className="bg-blue-600 text-white px-6 py-2 rounded-full font-medium shadow-md hover:bg-blue-800 transform transition hover:scale-105">
             Create Event
           </button>
-          <button className="bg-white text-blue-600 px-6 py-2 rounded-full font-medium shadow-md hover:bg-blue-700 transform transition hover:scale-105">
+          <button className="bg-white text-blue-600 px-6 py-2 rounded-full font-medium shadow-md hover:bg-gray-100 transform transition hover:scale-105">
             Attend Event
           </button>
         </div>

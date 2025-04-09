@@ -4,6 +4,10 @@ import FeatureCard from './FeatureCard'
 function Features() {
   return (
     <main className="max-w-md mx-auto px-4 py-2 sm:px-5 md:max-w-2xl lg:max-w-3xl">
+
+      <div className='mb-2 text-xl text-center font-semibold'>
+        Features
+      </div>
         {/* Features Section */}
         <div className="space-y-6">
           <FeatureCard
