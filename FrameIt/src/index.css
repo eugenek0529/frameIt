@@ -1,3 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=Questrial&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* How to make it default*/
+@layer base {
+  html {
+    font-family: 'Questrial', sans-serif;
+  }
+}

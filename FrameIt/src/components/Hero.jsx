@@ -1,11 +1,14 @@
 import React from 'react'
+import nameImage from '../assets/name.png'
 
 function Hero() {
   return (
     <div className="px-4 mt-20 text-center mb-8">
-        <h1 className="text-4xl font-bold text-blue-900 mb-3">
-          FrameIt
-        </h1>
+        <img 
+          src={nameImage}
+          alt="FrameIt Hero" 
+          className="mx-auto mb-6 max-w-full h-auto"
+        />
         <p className="text-lg text-blue-700 mb-6">
           See every angle of your event, shared by attendees.
         </p>
