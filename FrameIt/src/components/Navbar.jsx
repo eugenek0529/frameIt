@@ -1,7 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import logo from '../assets/logo.svg';
 
 function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
+  const location = useLocation();
+
+  useEffect(() => {
+    setIsOpen(false);
+  }, [location]);
 
   const toggleNavbar = () => {
     setIsOpen(!isOpen);
@@ -9,36 +16,80 @@ function Navbar() {
 
   return (
     <>
-      {/* Hamburger Button - Always visible */}
-      <button
-        onClick={toggleNavbar}
-        className="absolute top-4 right-4 z-30 focus:outline-none text-blue-900"
-      >
-        {/* Conditionally render burger or close icon */}
-        <i className={`fa-solid ${isOpen ? 'fa-xmark' : 'fa-bars'} fa-lg`}></i>
-      </button>
+      {/* Container for logo and hamburger - will scroll with page */}
+      <div className="relative w-full px-8 pt-8 flex justify-between items-center">
+        {/* Logo */}
+        <Link to="/">
+          <img 
+            src={logo} 
+            alt="FrameIt Logo" 
+            className="h-9 w-auto"
+          />
+        </Link>
+
+        {/* Hamburger Button */}
+        <button
+          onClick={toggleNavbar}
+          className="focus:outline-none text-blue-900 text-lg"
+        >
+          {isOpen ? (
+            <i className="fas fa-times fa-xl"></i>
+          ) : (
+            <i className="fas fa-bars fa-xl"></i>
+          )}
+        </button>
+      </div>
 
       {/* Full-screen Overlay Menu */}
       {isOpen && (
-        <div
-          className="fixed inset-0 bg-white flex flex-col items-center justify-between z-20 p-8" // Full screen, white background, space-between
-        >
-          {/* Top Section - Menu Links */}
-          <div className="mt-20 text-center space-y-4"> {/* Reduced spacing */}
-            <a href="#" className="block py-1 text-blue-700 text-lg hover:text-blue-900">About FrameIt</a>
-            <a href="#" className="block py-1 text-blue-700 text-lg hover:text-blue-900">Create Event</a>
-            <a href="#" className="block py-1 text-blue-700 text-lg hover:text-blue-900">Manage Event</a>
-            <a href="#" className="block py-1 text-blue-700 text-lg hover:text-blue-900">Attend Event</a>
+        <div className="fixed inset-0 bg-white flex flex-col items-center justify-between z-20 p-8">
+          {/* Rest of your menu code... */}
+          <div className="mt-24 text-center space-y-4">
+            <Link 
+              to="/" 
+              className="block py-1 text-blue-700 text-lg hover:text-blue-900"
+              onClick={() => setIsOpen(false)}
+            >
+              About FrameIt
+            </Link>
+            <Link 
+              to="/create" 
+              className="block py-1 text-blue-700 text-lg hover:text-blue-900"
+              onClick={() => setIsOpen(false)}
+            >
+              Create Event
+            </Link>
+            <Link 
+              to="/manage" 
+              className="block py-1 text-blue-700 text-lg hover:text-blue-900"
+              onClick={() => setIsOpen(false)}
+            >
+              Manage Event
+            </Link>
+            <Link 
+              to="/attend" 
+              className="block py-1 text-blue-700 text-lg hover:text-blue-900"
+              onClick={() => setIsOpen(false)}
+            >
+              Attend Event
+            </Link>
           </div>
 
-          {/* Bottom Section - Login/Signup Buttons */}
           <div className="flex justify-center space-x-4">
-            <button className="bg-blue-600 text-white px-6 py-2 rounded-full font-medium shadow-md hover:bg-blue-700 transform transition hover:scale-105">
+            <Link 
+              to="/login" 
+              className="bg-blue-600 text-white px-6 py-2 rounded-full font-medium shadow-md hover:bg-blue-700 transform transition hover:scale-105"
+              onClick={() => setIsOpen(false)}
+            >
               Log In
-            </button>
-            <button className="bg-white text-blue-600 px-6 py-2 rounded-full font-medium shadow-md hover:bg-blue-700 transform transition hover:scale-105">
+            </Link>
+            <Link 
+              to="/signup" 
+              className="bg-white text-blue-600 px-6 py-2 rounded-full font-medium shadow-md hover:bg-blue-700 hover:text-white transform transition hover:scale-105"
+              onClick={() => setIsOpen(false)}
+            >
               Sign Up
-            </button>
+            </Link>
           </div>
         </div>
       )}
