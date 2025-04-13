@@ -1,5 +1,7 @@
 import React from 'react'
 import nameImage from '../assets/name.png'
+import create_image_btn from '../assets/create_event_btn.svg'
+import attend_event_btn from '../assets/attend_event_btn.svg'
 
 function Hero() {
   return (
@@ -9,15 +11,15 @@ function Hero() {
           alt="FrameIt Hero" 
           className="mx-auto mb-6 max-w-full h-auto"
         />
-        <p className="text-lg text-blue-700 mb-6">
+        <p className="text-lg  mb-6">
           See every angle of your event, shared by attendees.
         </p>
         <div className="flex justify-center mt-14 space-x-4">
-          <button className="bg-blue-600 text-white px-6 py-2 rounded-full font-medium shadow-md hover:bg-blue-800 transform transition hover:scale-105">
-            Create Event
+          <button className="transform transition-all duration-200 hover:scale-105 active:scale-95 hover:opacity-90">
+              <img src={create_image_btn} alt="Create Event" className='h-10 w-auto' />
           </button>
-          <button className="bg-white text-blue-600 px-6 py-2 rounded-full font-medium shadow-md hover:bg-gray-100 transform transition hover:scale-105">
-            Attend Event
+          <button className="transform transition-all duration-200 hover:scale-105 active:scale-95 hover:opacity-90">
+              <img src={attend_event_btn} alt="Attend Event" className='h-10 w-auto' />
           </button>
         </div>
       </div>

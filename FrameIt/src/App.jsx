@@ -11,12 +11,7 @@ function App() {
     <Router>
       <div 
         className="min-h-screen flex flex-col bg-gradient-to-b from-blue-100 to-white"
-        style={{
-          backgroundImage: "url('blue-background.png')",
-          backgroundSize: 'cover',       // Cover the entire container
-          backgroundRepeat: 'no-repeat', // Prevent image repetition
-          backgroundPosition: 'center',   // Center the image
-        }}
+        
         >
         <Navbar />
 

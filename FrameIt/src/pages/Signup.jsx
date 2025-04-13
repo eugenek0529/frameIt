@@ -59,8 +59,8 @@ const SignUp = () => {
     };
 
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center">
-            <div className="max-w-md w-full bg-gradient-to-b from-blue-100 to-white rounded-2xl shadow-xl p-8 space-y-6">
+        <div className="min-h-screen flex flex-col items-center justify-center px-4">
+            <div className="w-full max-w-md bg-gradient-to-b from-blue-100 to-white rounded-2xl shadow-xl p-8 space-y-6 mx-auto">
                 {/* Header Section */}
                 <div className="text-center space-y-2">
                     <h2 className="text-3xl font-bold text-gray-900">
