@@ -1,6 +1,7 @@
 # FrameIt
 
-<img width="544" alt="landing" src="https://github.com/user-attachments/assets/6438e359-384f-42bf-889f-873c2540dc88" />
+<img width="570" alt="landing" src="https://github.com/user-attachments/assets/63f0d321-ab1d-4708-a7da-7ad78118f1ab" />
+
 
 A web application that allows event attendees to easily share and view photos from the same event, creating a collaborative visual record. Event creators can manage their events and see all the perspectives shared.
 
