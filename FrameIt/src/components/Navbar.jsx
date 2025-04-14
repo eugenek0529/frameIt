@@ -43,7 +43,7 @@ function Navbar() {
 
       {/* Full-screen Overlay Menu */}
       {isOpen && (
-        <div className="fixed inset-0 bg-black flex flex-col justify-between z-20 p-8">
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-sm flex flex-col justify-between z-20 p-8">
           {/* Top Section with Logo and Close Button */}
           <div>
             {/* Logo and Close Button Container */}
