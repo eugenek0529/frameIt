@@ -1,14 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../firebase/firebase.config';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, deleteDoc } from 'firebase/firestore';
+import { getStorage, ref, deleteObject } from 'firebase/storage';
 import { MapPinIcon, CalendarIcon } from '@heroicons/react/24/outline';
+import { useAuth } from '../context/AuthContext';
 
 export default function EventDetails() {
   const { eventId } = useParams();
+  const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [success, setSuccess] = useState(null);
 
   useEffect(() => {
     const fetchEventDetails = async () => {
@@ -30,14 +36,137 @@ export default function EventDetails() {
     fetchEventDetails();
   }, [eventId]);
 
+  const handleEdit = () => {
+    navigate(`/events/edit/${eventId}`, { state: { event } });
+  };
+
+  const extractImagePathFromUrl = (url) => {
+    try {
+      // Firebase Storage URLs contain a path after /o/
+      const urlPath = url.split('/o/')[1];
+      // The path is URL encoded and includes query parameters
+      const imagePath = decodeURIComponent(urlPath.split('?')[0]);
+      return imagePath;
+    } catch (error) {
+      console.error('Error extracting image path:', error);
+      return null;
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      // First, delete the cover image if it exists
+      if (event.coverImageUrl) {
+        try {
+          const storage = getStorage();
+          const imagePath = extractImagePathFromUrl(event.coverImageUrl);
+          
+          if (imagePath) {
+            const imageRef = ref(storage, imagePath);
+            await deleteObject(imageRef);
+            console.log('Cover image deleted successfully');
+          }
+        } catch (imageError) {
+          console.error('Error deleting image:', imageError);
+          // Continue with event deletion even if image deletion fails
+        }
+      }
+
+      // Then delete the event document
+      await deleteDoc(doc(db, 'events', eventId));
+      setSuccess('Event deleted successfully');
+      
+      // Navigate after a short delay to show success message
+      setTimeout(() => {
+        navigate('/events');
+      }, 1500);
+    } catch (err) {
+      console.error('Error deleting event:', err);
+      setError('Failed to delete event');
+    }
+  };
+
+  // Delete confirmation modal
+  const DeleteModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
+        <h3 className="text-lg font-semibold mb-4">Delete Event</h3>
+        <p className="text-gray-600 mb-6">
+          Are you sure you want to delete this event? This action cannot be undone.
+          {event.coverImageUrl && (
+            <span className="block mt-2 text-sm text-red-500">
+              This will also delete the event's cover image.
+            </span>
+          )}
+        </p>
+        <div className="flex justify-end space-x-3">
+          <button
+            onClick={() => setShowDeleteModal(false)}
+            className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => {
+              handleDelete();
+              setShowDeleteModal(false);
+            }}
+            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Add success message display
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => {
+        setSuccess('');
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [success]);
+
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   if (error) return <div className="min-h-screen flex items-center justify-center text-red-500">{error}</div>;
   if (!event) return null;
 
+  const isCreator = currentUser && event.creatorId === currentUser.uid;
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-100 to-white py-12">
       <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
-        
+        {/* Header */}
+        <div className="px-4 py-3 flex justify-between items-center border-b bg-white">
+          <button 
+            onClick={() => navigate(-1)} 
+            className="text-black p-2"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+          </button>
+          {isCreator && (
+            <div className="flex space-x-2">
+              <button
+                onClick={handleEdit}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-full text-sm font-medium"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                className="bg-red-600 text-white px-4 py-2 rounded-full text-sm font-medium"
+              >
+                Delete
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Cover Image */}
         <div className="relative w-full h-[300px]">
           {event.coverImageUrl ? (
@@ -93,6 +222,16 @@ export default function EventDetails() {
             </div>
           )}
         </div>
+
+        {/* Add success message display */}
+        {success && (
+          <div className="fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
+            {success}
+          </div>
+        )}
+
+        {/* Delete Modal */}
+        {showDeleteModal && <DeleteModal />}
       </div>
     </div>
   );

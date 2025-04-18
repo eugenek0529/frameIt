@@ -98,7 +98,7 @@ function Navbar() {
               Create new Event
             </Link>
             <Link 
-              to="/manage" 
+              to="/my-events" 
               className="block text-2xl font-light text-white hover:text-blue-200"
               onClick={() => setIsOpen(false)}
             >
