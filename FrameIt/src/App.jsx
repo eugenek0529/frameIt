@@ -1,14 +1,21 @@
 import React from 'react';
+import { AuthProvider } from './context/AuthContext';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Hero from './components/Hero';
 import Navbar from './components/Navbar';
 import Features from './components/Features';
 import SignUp from './pages/Signup';
 import Login from './pages/Login';
+import { PrivateRoute } from './routes/PrivateRoute';
+import CreateEvent from './pages/CreateEvent';
+import EventDetails from './pages/EventDetails';
+import EditEvent from './pages/EditEvent';
+import MyEvents from './pages/MyEvnets';
 
 function App() {
   return (
     <Router>
+      <AuthProvider>
       <div 
         className="min-h-screen flex flex-col bg-gradient-to-b from-blue-100 to-white"
         
@@ -26,6 +33,35 @@ function App() {
           } />
           <Route path="/signup" element={<SignUp />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/events/:eventId" element={<EventDetails />} />
+
+          {/* Below is protected routes */}
+          <Route
+            path="/create"
+            element={
+              <PrivateRoute>
+                <CreateEvent />
+              </PrivateRoute>
+            }
+          /> 
+          <Route
+            path="/events/edit/:eventId"
+            element={
+              <PrivateRoute>
+                <EditEvent />
+              </PrivateRoute>
+            }
+          /> 
+          <Route
+            path="/my-events"
+            element={
+              <PrivateRoute>
+                <MyEvents />
+              </PrivateRoute>
+            }
+          /> 
+          
+          
         </Routes>
 
         {/* Footer */}
@@ -33,6 +69,7 @@ function App() {
           <p>© 2024 FrameIt. All rights reserved.</p>
         </footer>
       </div>
+      </AuthProvider>
     </Router>
   );
 }

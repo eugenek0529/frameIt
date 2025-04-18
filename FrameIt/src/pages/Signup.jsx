@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { createUserDocument } from '../firebase/firestore.users';
 import { auth } from '../firebase/firebase.config'; // Import Firebase auth instance
 import { useNavigate, Link } from 'react-router-dom';
 
@@ -43,11 +44,15 @@ const SignUp = () => {
                 formData.email,
                 formData.password
             );
+            const user = userCredential.user; // This grabs the user object
+            console.log('clg at signup, userCred info: ' + userCredential)
 
             // 2. Update the user's profile with the full name
-            await updateProfile(auth.currentUser, { // Use auth.currentUser here!
+            await updateProfile(user, { 
                 displayName: formData.fullName
             });
+
+            await createUserDocument(user)
 
             // 3. Redirect the user to the home page or desired route
             navigate('/');
