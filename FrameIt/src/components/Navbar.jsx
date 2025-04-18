@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import logo from '../assets/logo.svg';
 import logo_close from '../assets/logo_close.svg'; 
+import { useAuth } from '../context/AuthContext';
 
 function Navbar() {
+  const { currentUser, logout } = useAuth();
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
 
@@ -13,6 +16,15 @@ function Navbar() {
 
   const toggleNavbar = () => {
     setIsOpen(!isOpen);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (error) {
+      console.error('Failed to log out:', error);
+    }
   };
 
   return (
@@ -68,8 +80,11 @@ function Navbar() {
             
             {/* User Section */}
             <div className="mt-6 space-y-4">
-              <h2 className="text-2xl font-light text-white">User</h2>
-              <h2 className="text-2xl font-light text-white">My Events</h2>
+              {currentUser && (
+                <h2 className="text-2xl font-light text-white">
+                  Hello! {currentUser.displayName || currentUser.email}
+                </h2>
+              )}
             </div>
           </div>
 
@@ -80,14 +95,14 @@ function Navbar() {
               className="block text-2xl font-light text-white hover:text-blue-200"
               onClick={() => setIsOpen(false)}
             >
-              Create & Manage Events
+              Create new Event
             </Link>
             <Link 
               to="/manage" 
               className="block text-2xl font-light text-white hover:text-blue-200"
               onClick={() => setIsOpen(false)}
             >
-              Event Management
+              My Events
             </Link>
             <Link 
               to="/attend" 
@@ -96,31 +111,36 @@ function Navbar() {
             >
               Attend an Event
             </Link>
-            <Link 
-              to="/experience" 
-              className="block text-2xl font-light text-white hover:text-blue-200"
-              onClick={() => setIsOpen(false)}
-            >
-              Attendee Experience
-            </Link>
+            
           </div>
 
-          {/* Bottom Section - Login/Signup Buttons */}
+          {/* Bottom Section - Login/Signup/Logout Buttons */}
           <div className="flex justify-center space-x-4">
-            <Link 
-              to="/login" 
-              className="bg-white text-black px-6 py-2 rounded-full font-medium shadow-md hover:bg-gray-200 transform transition hover:scale-105"
-              onClick={() => setIsOpen(false)}
-            >
-              Log In
-            </Link>
-            <Link 
-              to="/signup" 
-              className="bg-transparent text-white px-6 py-2 rounded-full font-medium shadow-md border-2 border-white hover:bg-white hover:text-black transform transition hover:scale-105"
-              onClick={() => setIsOpen(false)}
-            >
-              Sign Up
-            </Link>
+            {currentUser ? (
+              <button
+                onClick={handleLogout}
+                className="bg-white text-black px-6 py-2 rounded-full font-medium shadow-md hover:bg-gray-200 transform transition hover:scale-105"
+              >
+                Log Out
+              </button>
+            ) : (
+              <>
+                <Link 
+                  to="/login" 
+                  className="bg-white text-black px-6 py-2 rounded-full font-medium shadow-md hover:bg-gray-200 transform transition hover:scale-105"
+                  onClick={() => setIsOpen(false)}
+                >
+                  Log In
+                </Link>
+                <Link 
+                  to="/signup" 
+                  className="bg-transparent text-white px-6 py-2 rounded-full font-medium shadow-md border-2 border-white hover:bg-white hover:text-black transform transition hover:scale-105"
+                  onClick={() => setIsOpen(false)}
+                >
+                  Sign Up
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}
