@@ -12,6 +12,7 @@ import EventDetails from './pages/EventDetails';
 import EditEvent from './pages/EditEvent';
 import MyEvents from './pages/MyEvnets';
 import EventAccess from './pages/EventAccess';
+import EventWelcome from './pages/EventWelcome';
 
 function App() {
   return (
@@ -59,6 +60,14 @@ function App() {
             element={
               <PrivateRoute>
                 <MyEvents />
+              </PrivateRoute>
+            }
+          /> 
+          <Route
+            path="/events/:eventId/welcome"
+            element={
+              <PrivateRoute>
+                <EventWelcome />
               </PrivateRoute>
             }
           /> 

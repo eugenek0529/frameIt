@@ -13,7 +13,6 @@ export default function CreateEvent() {
     tags: '',
     location: '',
     startTime: '',
-    accessCode: '',
     welcomeMessage: '',
     description: '',
     capacity: DEFAULT_CAPACITY,
@@ -118,14 +117,6 @@ export default function CreateEvent() {
                   required
                   className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md py-2 px-3"
                 />
-              </div>
-            </div>
-
-            {/* Access Code */}
-            <div>
-              <label htmlFor="accessCode" className="block text-sm font-medium text-gray-700">Access Code <span className="text-gray-500">(optional)</span></label>
-              <div className="mt-1 relative rounded-md shadow-sm">
-                <input type="text" id="accessCode" name="accessCode" value={formData.accessCode} onChange={handleChange} className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md py-2 px-3" placeholder="Optional code for private events" />
               </div>
             </div>
 

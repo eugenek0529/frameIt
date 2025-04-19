@@ -9,7 +9,8 @@ import {
   getDocs,
   query,
   where,
-  serverTimestamp 
+  serverTimestamp,
+  setDoc
 } from 'firebase/firestore';
 import { 
   ref, 
@@ -17,31 +18,84 @@ import {
   getDownloadURL,
   deleteObject 
 } from 'firebase/storage';
+import QRCode from 'qrcode';
+
+// Helper function to generate a 4-digit access code
+const generateAccessCode = () => {
+  return Math.floor(1000 + Math.random() * 9000).toString(); // Generates a number between 1000-9999
+};
+
+// Helper function to generate QR code
+const generateQRCode = async (eventId) => {
+  try {
+    // Generate QR code with event ID and higher quality settings
+    const qrCodeDataUrl = await QRCode.toDataURL(eventId, {
+      errorCorrectionLevel: 'H',
+      margin: 4,
+      width: 400,
+      color: {
+        dark: '#000000',
+        light: '#ffffff'
+      }
+    });
+
+    // Convert data URL to blob
+    const response = await fetch(qrCodeDataUrl);
+    const blob = await response.blob();
+
+    // Upload to Firebase Storage
+    const qrCodeRef = ref(storage, `events/${eventId}/qr-code.png`);
+    await uploadBytes(qrCodeRef, blob, {
+      contentType: 'image/png'
+    });
+
+    // Get the download URL
+    const downloadURL = await getDownloadURL(qrCodeRef);
+    return downloadURL;
+  } catch (error) {
+    console.error('Error generating QR code:', error);
+    throw error;
+  }
+};
 
 // Create Event
 export const createEvent = async (eventData, coverImageFile, userId) => {
   try {
-    let coverImageUrl = '';
-    
-    // Handle image upload
-    if (coverImageFile) {
-      const filename = `${Date.now()}-${coverImageFile.name.replace(/[^a-zA-Z0-9.-]/g, '')}`;
-      const storageRef = ref(storage, `event-covers/${filename}`);
-      const uploadResult = await uploadBytes(storageRef, coverImageFile);
-      coverImageUrl = await getDownloadURL(uploadResult.ref);
-    }
+    // Generate access code
+    const accessCode = generateAccessCode();
+
+    // Create event document
+    const eventRef = doc(collection(db, 'events'));
+    const eventId = eventRef.id;
+
+    // Generate QR code and get URL
+    const qrCodeUrl = await generateQRCode(eventId);
 
     // Prepare event data
-    const newEventData = {
+    const eventWithMetadata = {
       ...eventData,
+      accessCode,
+      qrCodeUrl, // Store the URL
       creatorId: userId,
-      creationTimestamp: serverTimestamp(),
-      coverImageUrl,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      tags: eventData.tags ? eventData.tags.split(',').map(tag => tag.trim()).filter(Boolean) : [],
     };
 
-    // Add to Firestore
-    const docRef = await addDoc(collection(db, 'events'), newEventData);
-    return { id: docRef.id, ...newEventData };
+    // If there's a cover image, upload it
+    if (coverImageFile) {
+      const imageRef = ref(storage, `events/${eventId}/cover`);
+      await uploadBytes(imageRef, coverImageFile);
+      eventWithMetadata.coverImageUrl = await getDownloadURL(imageRef);
+    }
+
+    // Save event data
+    await setDoc(eventRef, eventWithMetadata);
+
+    return {
+      id: eventId,
+      ...eventWithMetadata,
+    };
   } catch (error) {
     console.error('Error creating event:', error);
     throw error;
@@ -86,16 +140,18 @@ export const updateEvent = async (eventId, updateData, newCoverImageFile) => {
   try {
     const eventRef = doc(db, 'events', eventId);
     
+    // If there's a new cover image, upload it
     if (newCoverImageFile) {
-      const filename = `${Date.now()}-${newCoverImageFile.name.replace(/[^a-zA-Z0-9.-]/g, '')}`;
-      const storageRef = ref(storage, `event-covers/${filename}`);
-      const uploadResult = await uploadBytes(storageRef, newCoverImageFile);
-      updateData.coverImageUrl = await getDownloadURL(uploadResult.ref);
+      const imageRef = ref(storage, `events/${eventId}/cover`);
+      await uploadBytes(imageRef, newCoverImageFile);
+      updateData.coverImageUrl = await getDownloadURL(imageRef);
     }
 
+    // Update the event
     await updateDoc(eventRef, {
       ...updateData,
-      lastUpdated: serverTimestamp()
+      updatedAt: serverTimestamp(),
+      tags: updateData.tags ? updateData.tags.split(',').map(tag => tag.trim()).filter(Boolean) : [],
     });
 
     return { id: eventId, ...updateData };
@@ -108,6 +164,7 @@ export const updateEvent = async (eventId, updateData, newCoverImageFile) => {
 // Delete Event
 export const deleteEvent = async (eventId) => {
   try {
+    // Get event data first to check for images
     const eventDoc = await getDoc(doc(db, 'events', eventId));
     if (!eventDoc.exists()) {
       throw new Error('Event not found');
@@ -115,16 +172,23 @@ export const deleteEvent = async (eventId) => {
 
     const eventData = eventDoc.data();
 
-    // Delete cover image if exists
+    // Delete cover image if it exists
     if (eventData.coverImageUrl) {
-      const imageRef = ref(storage, eventData.coverImageUrl);
-      await deleteObject(imageRef).catch(err => {
-        console.warn('Error deleting image:', err);
-      });
+      const imageRef = ref(storage, `events/${eventId}/cover`);
+      try {
+        await deleteObject(imageRef);
+      } catch (error) {
+        console.warn('Error deleting cover image:', error);
+      }
     }
 
+    // Delete QR code if it exists
+    if (eventData.qrCodeUrl) {
+      // QR code URL is stored as a string, so no need to delete from storage
+    }
+
+    // Delete the event document
     await deleteDoc(doc(db, 'events', eventId));
-    return true;
   } catch (error) {
     console.error('Error deleting event:', error);
     throw error;

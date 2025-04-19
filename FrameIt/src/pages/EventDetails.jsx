@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-
-import { db } from '../firebase/firebase.config';
-import { doc, getDoc, deleteDoc } from 'firebase/firestore';
-
-import { MapPinIcon, CalendarIcon } from '@heroicons/react/24/outline';
-import { useAuth } from '../context/AuthContext';
 import { getEventById, deleteEvent } from '../firebase/firestore.event';
+import { getStorage, ref, getDownloadURL } from 'firebase/storage';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase/firebase.config';
+import { MapPinIcon, CalendarIcon, QrCodeIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { useAuth } from '../context/AuthContext';
 
 export default function EventDetails() {
   const { eventId } = useParams();
@@ -17,6 +16,8 @@ export default function EventDetails() {
   const [error, setError] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [success, setSuccess] = useState(null);
+  const [showQRCode, setShowQRCode] = useState(false);
+  const [downloadLoading, setDownloadLoading] = useState(false);
 
   useEffect(() => {
     const fetchEventDetails = async () => {
@@ -65,6 +66,39 @@ export default function EventDetails() {
       navigate('/events');
     } catch (err) {
       setError('Failed to delete event');
+    }
+  };
+
+  const handleQRDownload = async () => {
+    if (!event?.qrCodeUrl) return;
+    setDownloadLoading(true);
+
+    try {
+      // Create a temporary link element
+      const link = document.createElement('a');
+      link.href = event.qrCodeUrl;
+      link.download = `${event.name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-qr-code.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error downloading QR code:', error);
+      setError('Failed to download QR code');
+      
+      // Fallback: Open in new tab
+      window.open(event.qrCodeUrl, '_blank');
+    } finally {
+      setDownloadLoading(false);
+    }
+  };
+
+  // Add this function to copy QR code URL
+  const handleCopyQRUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(event.qrCodeUrl);
+      // You could add a temporary success message here
+    } catch (error) {
+      setError('Failed to copy QR code URL');
     }
   };
 
@@ -121,7 +155,7 @@ export default function EventDetails() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-100 to-white py-12">
       <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
-        {/* Header */}
+        {/* Header - Only keep the back button */}
         <div className="px-4 py-3 flex justify-between items-center border-b bg-white">
           <button 
             onClick={() => navigate(-1)} 
@@ -131,22 +165,6 @@ export default function EventDetails() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
           </button>
-          {isCreator && (
-            <div className="flex space-x-2">
-              <button
-                onClick={handleEdit}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-full text-sm font-medium"
-              >
-                Edit
-              </button>
-              <button
-                onClick={() => setShowDeleteModal(true)}
-                className="bg-red-600 text-white px-4 py-2 rounded-full text-sm font-medium"
-              >
-                Delete
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Cover Image */}
@@ -164,63 +182,143 @@ export default function EventDetails() {
           )}          
         </div>
 
-        {/* Event Details */}
-        <div className="p-4 space-y-4">
+        <div className="p-6">
           {/* Title */}
           <h1 className="text-2xl font-bold text-gray-900">{event.name}</h1>
 
           {/* Description */}
-          <p className="text-gray-600">{event.description}</p>
+          <p className="text-gray-600 mt-4">{event.description}</p>
 
-          {/* Location and Date */}
-          <div className="flex flex-col space-y-3 mt-6">
-            <div className="flex items-center space-x-3">
-              <MapPinIcon className="h-6 w-6 text-gray-400" />
-              <span className="text-gray-600">{event.location}</span>
-            </div>
-            <div className="flex items-center space-x-3">
-              <CalendarIcon className="h-6 w-6 text-gray-400" />
-              <span className="text-gray-600">
-                {new Date(event.startTime).toLocaleDateString('en-US', {
-                  month: 'long',
-                  day: 'numeric',
-                  year: 'numeric'
-                })}
-              </span>
-            </div>
-          </div>
-
-          {/* Tags */}
-          {Array.isArray(event.tags) && event.tags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-4">
-              {event.tags.map((tag, index) => (
-                <span 
-                  key={index}
-                  className="bg-gray-100 text-gray-600 text-sm px-3 py-1 rounded-full"
-                >
-                  {tag}
+          {/* QR Code Toggle Section */}
+          {currentUser && event?.creatorId === currentUser.uid && (
+            <div className="w-full">
+              <button
+                onClick={() => setShowQRCode(!showQRCode)}
+                className="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-all duration-200"
+              >
+                <QrCodeIcon className="h-6 w-6 text-indigo-600" />
+                <span className="text-indigo-600 font-medium">
+                  {showQRCode ? 'Hide Access Information' : 'Show Access Information'}
                 </span>
-              ))}
+              </button>
+
+              {/* Access Code and QR Code Section with Animation */}
+              <div
+                className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                  showQRCode ? 'max-h-[400px] opacity-100 mt-4' : 'max-h-0 opacity-0'
+                }`}
+              >
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    {/* Access Code */}
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900">Event Access Code</h3>
+                      <p className="text-sm text-gray-500 mt-1">
+                        Share this code with your attendees
+                      </p>
+                      <div className="mt-2 bg-white inline-block px-4 py-2 rounded-md border-2 border-indigo-100">
+                        <span className="text-2xl font-mono font-bold text-indigo-600 tracking-wider">
+                          {event.accessCode}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* QR Code */}
+                    {event.qrCodeUrl && (
+                      <div className="flex flex-col items-center">
+                        <div className="bg-white p-3 rounded-lg shadow-sm mb-2">
+                          <img 
+                            src={event.qrCodeUrl} 
+                            alt="Event QR Code" 
+                            className="w-32 h-32"
+                          />
+                        </div>
+                        <button
+                          onClick={handleQRDownload}
+                          disabled={downloadLoading}
+                          className={`
+                            flex items-center space-x-2 px-4 py-2 
+                            bg-white border border-gray-300 rounded-md 
+                            text-gray-700 hover:bg-gray-50 
+                            transition-colors duration-200
+                            ${downloadLoading ? 'opacity-50 cursor-not-allowed' : ''}
+                          `}
+                        >
+                          {downloadLoading ? (
+                            <span>Downloading...</span>
+                          ) : (
+                            <>
+                              <ArrowDownTrayIcon className="h-5 w-5" />
+                              <span>Download QR Code</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Creator Actions */}
-          {currentUser && event.creatorId === currentUser.uid && (
-            <div className="flex space-x-3 mt-6">
-              <button
-                onClick={() => navigate(`/events/edit/${event.id}`)}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
-              >
-                Edit Event
-              </button>
-              <button
-                onClick={() => {/* Add delete handler */}}
-                className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
-              >
-                Delete Event
-              </button>
+          {/* Event Details */}
+          <div className="space-y-6 mt-6">
+            {/* Location and Date */}
+            <div className="flex flex-col space-y-3">
+              <div className="flex items-center space-x-3">
+                <MapPinIcon className="h-6 w-6 text-gray-400" />
+                <span className="text-gray-600">{event.location}</span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <CalendarIcon className="h-6 w-6 text-gray-400" />
+                <span className="text-gray-600">
+                  {new Date(event.startTime).toLocaleDateString('en-US', {
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric'
+                  })}
+                </span>
+              </div>
             </div>
-          )}
+
+            {/* Tags */}
+            {Array.isArray(event.tags) && event.tags.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-4">
+                {event.tags.map((tag, index) => (
+                  <span 
+                    key={index}
+                    className="bg-gray-100 text-gray-600 text-sm px-3 py-1 rounded-full"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Event Metadata */}
+            <div className="text-sm text-gray-500 space-y-1 pt-4 border-t">
+              <p>Created: {event.createdAt?.toDate().toLocaleDateString()}</p>
+              <p>Last Updated: {event.updatedAt?.toDate().toLocaleDateString()}</p>
+            </div>
+
+            {/* Creator Actions - Keep only these buttons */}
+            {currentUser && event?.creatorId === currentUser.uid && (
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={() => navigate(`/events/edit/${event.id}`)}
+                  className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
+                >
+                  Edit Event
+                </button>
+                <button
+                  onClick={() => setShowDeleteModal(true)}
+                  className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+                >
+                  Delete Event
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Add success message display */}
@@ -233,6 +331,13 @@ export default function EventDetails() {
         {/* Delete Modal */}
         {showDeleteModal && <DeleteModal />}
       </div>
+
+      {/* Show error message if download fails */}
+      {error && (
+        <div className="fixed bottom-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded shadow-lg">
+          {error}
+        </div>
+      )}
     </div>
   );
 }
