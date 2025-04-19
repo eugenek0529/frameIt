@@ -21,9 +21,12 @@ function Hero() {
                 <img src={create_image_btn} alt="Create Event" className='h-10 w-auto' />
             </button>
           </Link>
-          <button className="transform transition-all duration-200 hover:scale-105 active:scale-95 hover:opacity-90">
-              <img src={attend_event_btn} alt="Attend Event" className='h-10 w-auto' />
-          </button>
+          <Link to='/attend'>
+            <button className="transform transition-all duration-200 hover:scale-105 active:scale-95 hover:opacity-90">
+                <img src={attend_event_btn} alt="Attend Event" className='h-10 w-auto' />
+            </button>
+          </Link>
+          
         </div>
       </div>
   )

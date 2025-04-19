@@ -11,6 +11,7 @@ import CreateEvent from './pages/CreateEvent';
 import EventDetails from './pages/EventDetails';
 import EditEvent from './pages/EditEvent';
 import MyEvents from './pages/MyEvnets';
+import EventAccess from './pages/EventAccess';
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
           <Route path="/signup" element={<SignUp />} />
           <Route path="/login" element={<Login />} />
           <Route path="/events/:eventId" element={<EventDetails />} />
+          <Route path="/attend" element={<EventAccess />} />
 
           {/* Below is protected routes */}
           <Route

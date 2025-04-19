@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { db } from '../firebase/firebase.config';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { createEvent } from '../firebase/firestore.event.js';
 
 const DEFAULT_CAPACITY = 30;
 
@@ -39,70 +37,29 @@ export default function CreateEvent() {
     setSuccess(false);
     setLoading(true);
 
-    if (!formData.name || !formData.location || !formData.startTime) {
-      setError('Please fill in all required fields.');
-      setLoading(false);
-      return;
-    }
-
     try {
-      let coverImageUrl = '';
-      
-      // Image Upload Logic
-      if (coverImageFile) {
-        try {
-          const storage = getStorage();
-          // Create a unique filename using timestamp and original filename
-          const filename = `${Date.now()}-${coverImageFile.name.replace(/[^a-zA-Z0-9.-]/g, '')}`;
-          const storageRef = ref(storage, `event-covers/${filename}`);
-          
-          // Upload the file
-          const uploadResult = await uploadBytes(storageRef, coverImageFile);
-          
-          // Get the download URL
-          coverImageUrl = await getDownloadURL(uploadResult.ref);
-        } catch (uploadError) {
-          console.error('Error uploading image:', uploadError);
-          setError('Failed to upload image. Please try again.');
-          setLoading(false);
-          return;
-        }
+      if (!formData.name || !formData.location || !formData.startTime) {
+        setError('Please fill in all required fields.');
+        setLoading(false);
+        return;
       }
 
-      // Create event data object
-      const eventData = {
-        ...formData,
-        tags: formData.tags.split(',').map(tag => tag.trim()).filter(Boolean),
-        creatorId: currentUser.uid,
-        creationTimestamp: serverTimestamp(),
-        capacity: DEFAULT_CAPACITY,
-        coverImageUrl, // Add the image URL to the event data
-      };
+      const newEvent = await createEvent(
+        formData,
+        coverImageFile,
+        currentUser.uid
+      );
 
-      // Add to Firestore
-      const docRef = await addDoc(collection(db, 'events'), eventData);
       setSuccess('Event created successfully!');
       
-      // Reset form
-      setFormData({
-        name: '',
-        tags: '',
-        location: '',
-        startTime: '',
-        accessCode: '',
-        welcomeMessage: '',
-        description: '',
-        capacity: DEFAULT_CAPACITY,
-      });
-      setCoverImageFile(null);
-
+      // Navigate to the new event's page
       setTimeout(() => {
-        navigate(`/events/${docRef.id}`);
-      }, 300);
-      
+        navigate(`/events/${newEvent.id}`);
+      }, 1500);
+
     } catch (err) {
-      console.error('Error creating event:', err);
-      setError('Failed to create event. Please try again.');
+      console.error('Error:', err);
+      setError('Failed to create event.');
     } finally {
       setLoading(false);
     }

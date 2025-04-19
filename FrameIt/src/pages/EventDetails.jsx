@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+
 import { db } from '../firebase/firebase.config';
 import { doc, getDoc, deleteDoc } from 'firebase/firestore';
-import { getStorage, ref, deleteObject } from 'firebase/storage';
+
 import { MapPinIcon, CalendarIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../context/AuthContext';
+import { getEventById, deleteEvent } from '../firebase/firestore.event';
 
 export default function EventDetails() {
   const { eventId } = useParams();
@@ -19,15 +21,19 @@ export default function EventDetails() {
   useEffect(() => {
     const fetchEventDetails = async () => {
       try {
+        console.log('Fetching event with ID:', eventId); // Debug log
         const eventDoc = await getDoc(doc(db, 'events', eventId));
+        
         if (eventDoc.exists()) {
-          setEvent({ id: eventDoc.id, ...eventDoc.data() });
+          const eventData = { id: eventDoc.id, ...eventDoc.data() };
+          console.log('Event data:', eventData); // Debug log
+          setEvent(eventData);
         } else {
           setError('Event not found');
         }
       } catch (err) {
-        setError('Failed to fetch event details');
         console.error('Error fetching event:', err);
+        setError('Failed to fetch event details');
       } finally {
         setLoading(false);
       }
@@ -55,33 +61,9 @@ export default function EventDetails() {
 
   const handleDelete = async () => {
     try {
-      // First, delete the cover image if it exists
-      if (event.coverImageUrl) {
-        try {
-          const storage = getStorage();
-          const imagePath = extractImagePathFromUrl(event.coverImageUrl);
-          
-          if (imagePath) {
-            const imageRef = ref(storage, imagePath);
-            await deleteObject(imageRef);
-            console.log('Cover image deleted successfully');
-          }
-        } catch (imageError) {
-          console.error('Error deleting image:', imageError);
-          // Continue with event deletion even if image deletion fails
-        }
-      }
-
-      // Then delete the event document
-      await deleteDoc(doc(db, 'events', eventId));
-      setSuccess('Event deleted successfully');
-      
-      // Navigate after a short delay to show success message
-      setTimeout(() => {
-        navigate('/events');
-      }, 1500);
+      await deleteEvent(eventId);
+      navigate('/events');
     } catch (err) {
-      console.error('Error deleting event:', err);
       setError('Failed to delete event');
     }
   };
@@ -95,7 +77,7 @@ export default function EventDetails() {
           Are you sure you want to delete this event? This action cannot be undone.
           {event.coverImageUrl && (
             <span className="block mt-2 text-sm text-red-500">
-              This will also delete the event's cover image.
+              This will also delete the event's images.
             </span>
           )}
         </p>
@@ -168,7 +150,7 @@ export default function EventDetails() {
         </div>
 
         {/* Cover Image */}
-        <div className="relative w-full h-[300px]">
+        <div className="relative w-full h-[400px]">
           {event.coverImageUrl ? (
             <img 
               src={event.coverImageUrl} 
@@ -183,7 +165,7 @@ export default function EventDetails() {
         </div>
 
         {/* Event Details */}
-        <div className="p-6 space-y-6">
+        <div className="p-4 space-y-4">
           {/* Title */}
           <h1 className="text-2xl font-bold text-gray-900">{event.name}</h1>
 
@@ -191,7 +173,7 @@ export default function EventDetails() {
           <p className="text-gray-600">{event.description}</p>
 
           {/* Location and Date */}
-          <div className="flex flex-col space-y-4">
+          <div className="flex flex-col space-y-3 mt-6">
             <div className="flex items-center space-x-3">
               <MapPinIcon className="h-6 w-6 text-gray-400" />
               <span className="text-gray-600">{event.location}</span>
@@ -209,8 +191,8 @@ export default function EventDetails() {
           </div>
 
           {/* Tags */}
-          {event.tags && event.tags.length > 0 && (
-            <div className="flex flex-wrap gap-2">
+          {Array.isArray(event.tags) && event.tags.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-4">
               {event.tags.map((tag, index) => (
                 <span 
                   key={index}
@@ -219,6 +201,24 @@ export default function EventDetails() {
                   {tag}
                 </span>
               ))}
+            </div>
+          )}
+
+          {/* Creator Actions */}
+          {currentUser && event.creatorId === currentUser.uid && (
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => navigate(`/events/edit/${event.id}`)}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
+              >
+                Edit Event
+              </button>
+              <button
+                onClick={() => {/* Add delete handler */}}
+                className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+              >
+                Delete Event
+              </button>
             </div>
           )}
         </div>
