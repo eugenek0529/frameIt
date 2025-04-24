@@ -10,15 +10,21 @@ import {
   query,
   where,
   serverTimestamp,
-  setDoc
+  setDoc,
+  arrayUnion,
+  arrayRemove
 } from 'firebase/firestore';
 import { 
   ref, 
   uploadBytes, 
   getDownloadURL,
-  deleteObject 
+  deleteObject,
+  getStorage,
+  listAll
 } from 'firebase/storage';
 import QRCode from 'qrcode';
+
+const DEFAULT_CAPACITY = 30;
 
 // Helper function to generate a 4-digit access code
 const generateAccessCode = () => {
@@ -75,11 +81,12 @@ export const createEvent = async (eventData, coverImageFile, userId) => {
     const eventWithMetadata = {
       ...eventData,
       accessCode,
-      qrCodeUrl, // Store the URL
+      qrCodeUrl,
       creatorId: userId,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       tags: eventData.tags ? eventData.tags.split(',').map(tag => tag.trim()).filter(Boolean) : [],
+      attendees: [] // Initialize empty attendees array
     };
 
     // If there's a cover image, upload it
@@ -91,6 +98,17 @@ export const createEvent = async (eventData, coverImageFile, userId) => {
 
     // Save event data
     await setDoc(eventRef, eventWithMetadata);
+
+    // Add event to creator's myEvents array
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+      myEvents: arrayUnion({
+        eventId,
+        eventName: eventData.name,
+        role: 'creator',
+        joinedAt: new Date().toISOString()
+      })
+    });
 
     return {
       id: eventId,
@@ -164,33 +182,103 @@ export const updateEvent = async (eventId, updateData, newCoverImageFile) => {
 // Delete Event
 export const deleteEvent = async (eventId) => {
   try {
-    // Get event data first to check for images
-    const eventDoc = await getDoc(doc(db, 'events', eventId));
+    // First get the event data
+    const eventRef = doc(db, 'events', eventId);
+    const eventDoc = await getDoc(eventRef);
+    
     if (!eventDoc.exists()) {
       throw new Error('Event not found');
     }
 
     const eventData = eventDoc.data();
 
-    // Delete cover image if it exists
+    // Delete files from Storage
+    const storage = getStorage();
+
+    // 1. Delete cover image if exists
     if (eventData.coverImageUrl) {
-      const imageRef = ref(storage, `events/${eventId}/cover`);
       try {
-        await deleteObject(imageRef);
+        const coverImageRef = ref(storage, `events/${eventId}/cover`);
+        await deleteObject(coverImageRef);
+        console.log('Cover image deleted successfully');
       } catch (error) {
-        console.warn('Error deleting cover image:', error);
+        console.error('Error deleting cover image:', error);
       }
     }
 
-    // Delete QR code if it exists
+    // 2. Delete QR code if exists
     if (eventData.qrCodeUrl) {
-      // QR code URL is stored as a string, so no need to delete from storage
+      try {
+        const qrCodeRef = ref(storage, `events/${eventId}/qr-code.png`);
+        await deleteObject(qrCodeRef);
+        console.log('QR code deleted successfully');
+      } catch (error) {
+        console.error('Error deleting QR code:', error);
+      }
     }
 
-    // Delete the event document
-    await deleteDoc(doc(db, 'events', eventId));
+    // 3. Delete the entire event folder in storage (in case there are other files)
+    try {
+      const eventFolderRef = ref(storage, `events/${eventId}`);
+      const filesList = await listAll(eventFolderRef);
+      
+      // Delete all remaining files in the folder
+      await Promise.all(
+        filesList.items.map(fileRef => deleteObject(fileRef))
+      );
+      console.log('All event files deleted successfully');
+    } catch (error) {
+      console.error('Error deleting event folder:', error);
+    }
+
+    // Collect all users who need to be updated
+    const usersToUpdate = new Set(); // Using Set to avoid duplicates
+    
+    // 1. Add creator
+    usersToUpdate.add(eventData.creatorId);
+    
+    // 2. Add all attendees who are authenticated users
+    eventData.attendees?.forEach(attendee => {
+      if (attendee.userId) { // Only for authenticated users
+        usersToUpdate.add(attendee.userId);
+      }
+    });
+
+    console.log(`Updating myEvents for ${usersToUpdate.size} users`);
+
+    // Update each user's document
+    await Promise.all(
+      Array.from(usersToUpdate).map(async (userId) => {
+        const userRef = doc(db, 'users', userId);
+        try {
+          const userDoc = await getDoc(userRef);
+          if (userDoc.exists()) {
+            // Get current myEvents array
+            const myEvents = userDoc.data().myEvents || [];
+            
+            // Filter out the deleted event
+            const updatedMyEvents = myEvents.filter(event => event.eventId !== eventId);
+            
+            // Update the user document
+            await updateDoc(userRef, {
+              myEvents: updatedMyEvents
+            });
+            
+            console.log(`Successfully updated myEvents for user ${userId}`);
+          }
+        } catch (error) {
+          console.error(`Error updating user ${userId}:`, error);
+          // Continue with other users even if one fails
+        }
+      })
+    );
+
+    // Finally delete the event document
+    await deleteDoc(eventRef);
+
+    console.log('Event deleted and all users updated successfully');
   } catch (error) {
-    console.error('Error deleting event:', error);
+    console.error('Error in deleteEvent:', error);
     throw error;
   }
 };
@@ -204,4 +292,82 @@ export const verifyEventAccess = async (eventId, accessCode) => {
     console.error('Error verifying event access:', error);
     throw error;
   }
-}; 
+};
+
+// Add or update attendee
+export const addAttendeeToEvent = async (eventId, attendeeData) => {
+  try {
+    const eventRef = doc(db, 'events', eventId);
+    const eventDoc = await getDoc(eventRef);
+
+    if (!eventDoc.exists()) {
+      throw new Error('Event not found');
+    }
+
+    const eventData = eventDoc.data();
+    const existingAttendee = eventData.attendees?.find(
+      attendee => attendee.email === attendeeData.email
+    );
+
+    if (existingAttendee) {
+      // If attendee exists, update their information
+      const updatedAttendees = eventData.attendees.map(attendee => 
+        attendee.email === attendeeData.email
+          ? {
+              ...attendee,
+              name: attendeeData.name, // Update name in case it changed
+              relationship: attendeeData.relationship, // Update relationship in case it changed
+              lastJoinedAt: new Date().toISOString() // Track their latest join
+            }
+          : attendee
+      );
+
+      await updateDoc(eventRef, {
+        attendees: updatedAttendees,
+        updatedAt: serverTimestamp()
+      });
+
+      return { ...existingAttendee, updated: true };
+    } else {
+      // If attendee doesn't exist, add them as new
+      const newAttendee = {
+        ...attendeeData,
+        joinedAt: new Date().toISOString(),
+        lastJoinedAt: new Date().toISOString()
+      };
+
+      await updateDoc(eventRef, {
+        attendees: arrayUnion(newAttendee),
+        updatedAt: serverTimestamp()
+      });
+
+      return { ...newAttendee, new: true };
+    }
+  } catch (error) {
+    console.error('Error adding/updating attendee:', error);
+    throw error;
+  }
+};
+
+// Add this new function
+export const checkAttendeeStatus = async (eventId, userId) => {
+  try {
+    const eventRef = doc(db, 'events', eventId);
+    const eventDoc = await getDoc(eventRef);
+
+    if (!eventDoc.exists()) {
+      return false;
+    }
+
+    const event = eventDoc.data();
+    
+    // Check if user exists in attendees array
+    return event.attendees?.some(attendee => 
+      attendee.userId === userId || 
+      (attendee.email === userId) // This handles the case where we pass email instead of userId
+    ) || false;
+  } catch (error) {
+    console.error('Error checking attendee status:', error);
+    return false;
+  }
+};

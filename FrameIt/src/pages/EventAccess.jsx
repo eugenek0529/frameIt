@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase/firebase.config';
 import { doc, getDoc } from 'firebase/firestore';
 import { Html5QrcodeScanner } from 'html5-qrcode';
+import { verifyEventAccess } from '../firebase/firestore.event';
 
 export default function EventAccess() {
   const navigate = useNavigate();
@@ -13,12 +14,6 @@ export default function EventAccess() {
   const [loading, setLoading] = useState(false);
   const [event, setEvent] = useState(null);
   const [showScanner, setShowScanner] = useState(false);
-
-  // For development: Sample QR codes
-  const devSampleEvents = [
-    { id: 'test-event-1', name: 'Test Event 1', accessCode: '1234' },
-    { id: 'test-event-2', name: 'Test Event 2', accessCode: '5678' },
-  ];
 
   useEffect(() => {
     let scanner;
@@ -32,16 +27,7 @@ export default function EventAccess() {
         fps: 5,
       });
 
-      scanner.render(success, error);
-
-      function success(result) {
-        scanner.clear();
-        verifyEventId(result);
-      }
-
-      function error(err) {
-        console.warn(err);
-      }
+      scanner.render(handleQRCodeScan, handleQRError);
     }
 
     return () => {
@@ -51,71 +37,53 @@ export default function EventAccess() {
     };
   }, [showScanner]);
 
-  const verifyEventId = async (idToVerify) => {
-    setError('');
-    setLoading(true);
-    setShowScanner(false);
-
+  const handleQRCodeScan = async (decodedText) => {
     try {
-      // For development: Check if it's a test event
-      const testEvent = devSampleEvents.find(e => e.id === idToVerify);
-      if (testEvent) {
-        setEvent(testEvent);
-        setEventId(idToVerify);
-        setStep(2);
-        return;
-      }
-
-      const eventDoc = await getDoc(doc(db, 'events', idToVerify));
+      // Assuming QR code contains the eventId
+      const scannedEventId = decodedText;
+      
+      // Verify event exists and get access code
+      const eventDoc = await getDoc(doc(db, 'events', scannedEventId));
       
       if (!eventDoc.exists()) {
-        setError('Event not found. Please check the Event ID.');
+        setError('Event not found');
         return;
       }
 
-      const eventData = eventDoc.data();
-      setEvent(eventData);
-      setEventId(idToVerify);
+      // Set event data and move to access code step
+      setEventId(scannedEventId);
+      setEvent(eventDoc.data());
       setStep(2);
-    } catch (err) {
-      console.error('Error:', err);
-      setError('Failed to find event. Please try again.');
-    } finally {
-      setLoading(false);
+      setShowScanner(false);
+
+    } catch (error) {
+      setError('Failed to process QR code');
+      console.error('QR code error:', error);
     }
   };
 
-  const verifyAccessCode = async () => {
+  const handleQRError = (error) => {
+    console.warn('QR code error:', error);
+  };
+
+  const handleAccessCodeSubmit = async (e) => {
+    e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      // For development: Check if it's a test event
-      const testEvent = devSampleEvents.find(e => e.id === eventId);
-      if (testEvent && accessCode === testEvent.accessCode) {
-        navigate(`/events/${eventId}/welcome`);
-        return;
-      }
-
-      if (accessCode === event.accessCode) {
+      const isValid = await verifyEventAccess(eventId, accessCode);
+      if (isValid) {
+        // If verified, navigate directly to welcome page
         navigate(`/events/${eventId}/welcome`);
       } else {
-        setError('Invalid access code. Please try again.');
+        setError('Invalid access code');
       }
     } catch (err) {
-      console.error('Error:', err);
-      setError('Verification failed. Please try again.');
+      setError('Failed to verify access code');
+      console.error('Access code error:', err);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (step === 1) {
-      await verifyEventId(eventId);
-    } else {
-      await verifyAccessCode();
     }
   };
 
@@ -127,118 +95,90 @@ export default function EventAccess() {
             {step === 1 ? 'Join Event' : 'Enter Access Code'}
           </h2>
 
-          {/* Progress Steps */}
-          <div className="flex items-center justify-center mb-8">
-            <div className={`h-1 w-24 rounded ${step === 1 ? 'bg-indigo-600' : 'bg-indigo-200'}`} />
-            <div className={`h-1 w-24 rounded ${step === 2 ? 'bg-indigo-600' : 'bg-indigo-200'}`} />
-          </div>
-
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
               {error}
             </div>
           )}
 
-          {step === 1 && (
-            <div className="space-y-6">
-              {/* QR Scanner Toggle */}
-              <div className="flex justify-center">
-                <button
-                  onClick={() => setShowScanner(!showScanner)}
-                  className="text-indigo-600 hover:text-indigo-500"
-                >
-                  {showScanner ? 'Enter ID Manually' : 'Scan QR Code'}
-                </button>
-              </div>
+          <div className="space-y-6">
+            {step === 1 ? (
+              <>
+                {/* QR Scanner Toggle */}
+                <div className="flex justify-center">
+                  <button
+                    onClick={() => setShowScanner(!showScanner)}
+                    className="text-indigo-600 hover:text-indigo-500"
+                  >
+                    {showScanner ? 'Enter ID Manually' : 'Scan QR Code'}
+                  </button>
+                </div>
 
-              {showScanner ? (
-                // QR Scanner
-                <div id="reader" className="w-full"></div>
-              ) : (
-                // Manual Input Form
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <label htmlFor="eventId" className="block text-sm font-medium text-gray-700 mb-2">
-                      Event ID
-                    </label>
-                    <input
-                      type="text"
-                      id="eventId"
-                      value={eventId}
-                      onChange={(e) => setEventId(e.target.value)}
-                      className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                      placeholder="Enter the event ID"
-                      required
-                    />
+                {showScanner ? (
+                  // QR Scanner
+                  <div id="reader" className="w-full"></div>
+                ) : (
+                  // Manual Input Form for Event ID
+                  <div className="space-y-4">
+                    <div>
+                      <label htmlFor="eventId" className="block text-sm font-medium text-gray-700 mb-2">
+                        Event ID
+                      </label>
+                      <input
+                        type="text"
+                        id="eventId"
+                        value={eventId}
+                        onChange={(e) => setEventId(e.target.value)}
+                        className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                        placeholder="Enter the event ID"
+                        required
+                      />
+                    </div>
+                    <button
+                      onClick={() => setStep(2)}
+                      className="w-full bg-indigo-600 text-white py-2 rounded-md hover:bg-indigo-700"
+                    >
+                      Next
+                    </button>
                   </div>
+                )}
+              </>
+            ) : (
+              // Access Code Form
+              <form onSubmit={handleAccessCodeSubmit} className="space-y-4">
+                <div>
+                  <label htmlFor="accessCode" className="block text-sm font-medium text-gray-700 mb-2">
+                    Access Code
+                  </label>
+                  <input
+                    type="text"
+                    id="accessCode"
+                    value={accessCode}
+                    onChange={(e) => setAccessCode(e.target.value)}
+                    className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                    placeholder="Enter the access code"
+                    required
+                  />
+                </div>
+                <div className="flex space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setStep(1)}
+                    className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-md hover:bg-gray-300"
+                  >
+                    Back
+                  </button>
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full bg-indigo-600 text-white py-2 rounded-md hover:bg-indigo-700"
+                    className="flex-1 bg-indigo-600 text-white py-2 rounded-md hover:bg-indigo-700"
                   >
-                    {loading ? 'Verifying...' : 'Next'}
+                    {loading ? 'Verifying...' : 'Join Event'}
                   </button>
-                </form>
-              )}
-
-              {/* Development Mode: Test Events */}
-              {process.env.NODE_ENV === 'development' && (
-                <div className="mt-8 p-4 bg-gray-50 rounded-md">
-                  <h3 className="text-sm font-medium text-gray-700 mb-2">Development Test Events:</h3>
-                  <div className="space-y-2">
-                    {devSampleEvents.map((testEvent) => (
-                      <div key={testEvent.id} className="text-sm">
-                        <button
-                          onClick={() => verifyEventId(testEvent.id)}
-                          className="text-indigo-600 hover:text-indigo-500"
-                        >
-                          {testEvent.name}
-                        </button>
-                        <span className="text-gray-500 ml-2">
-                          (ID: {testEvent.id}, Code: {testEvent.accessCode})
-                        </span>
-                      </div>
-                    ))}
-                  </div>
                 </div>
-              )}
-            </div>
-          )}
-
-          {step === 2 && (
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label htmlFor="accessCode" className="block text-sm font-medium text-gray-700 mb-2">
-                  Access Code
-                </label>
-                <input
-                  type="text"
-                  id="accessCode"
-                  value={accessCode}
-                  onChange={(e) => setAccessCode(e.target.value)}
-                  className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                  placeholder="Enter the access code"
-                  required
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => setStep(1)}
-                  className="text-indigo-600 hover:text-indigo-500"
-                >
-                  Back
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
-                >
-                  {loading ? 'Verifying...' : 'Join Event'}
-                </button>
-              </div>
-            </form>
-          )}
+              </form>
+            )}
+          </div>
         </div>
       </div>
     </div>

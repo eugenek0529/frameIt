@@ -18,7 +18,8 @@ export const createUserDocument = async (user) => {
         uid: user.uid,
         displayName: user.displayName || 'user', 
         email: user.email, 
-        createdAt: new Date().toISOString(), 
+        createdAt: new Date().toISOString(),
+        myEvents: []  // Initialize empty myEvents array
     }; 
 
     try {

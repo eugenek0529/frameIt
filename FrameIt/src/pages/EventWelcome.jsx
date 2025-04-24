@@ -1,190 +1,275 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { getEventById } from '../firebase/firestore.event';
-import { MapPinIcon, CalendarIcon, PhotoIcon, ArrowUpTrayIcon, UserIcon } from '@heroicons/react/24/outline';
+import { useParams, useNavigate, Navigate } from 'react-router-dom';
+import { getEventById, addAttendeeToEvent, checkAttendeeStatus } from '../firebase/firestore.event';
+import { MapPinIcon, CalendarIcon, PhotoIcon, ArrowUpTrayIcon, UserPlusIcon, CheckIcon } from '@heroicons/react/24/outline';
+import { useAuth } from '../context/AuthContext';
+import JoinEventForm from '../components/JoinEventForm';
 
 export default function EventWelcome() {
   const { eventId } = useParams();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showJoinForm, setShowJoinForm] = useState(false);
+  const [userStatus, setUserStatus] = useState({
+    isAttendee: false,
+    isCreator: false,
+    loading: true
+  });
+  const [hasAccess, setHasAccess] = useState(false);
 
   useEffect(() => {
-    const fetchEvent = async () => {
+    const fetchEventAndStatus = async () => {
       try {
+        setLoading(true);
+        // Fetch event data
         const eventData = await getEventById(eventId);
         setEvent(eventData);
+
+        // Check user status
+        if (currentUser) {
+          // Check if user is creator
+          const isCreator = eventData.creatorId === currentUser.uid;
+          
+          // Check if user is attendee
+          const isAttendee = eventData.attendees?.some(
+            attendee => attendee.userId === currentUser.uid
+          );
+
+          setUserStatus({
+            isAttendee,
+            isCreator,
+            loading: false
+          });
+        } else {
+          // For non-registered users, always show join button
+          setUserStatus({
+            isAttendee: false,
+            isCreator: false,
+            loading: false
+          });
+        }
+
+        // Check for verified access
+        const verifiedAccess = localStorage.getItem('verifiedEventAccess');
+        if (!verifiedAccess) {
+          // No verification found, redirect to access page
+          navigate(`/events/${eventId}/access`);
+          return;
+        }
+
+        const { eventId: verifiedEventId, timestamp } = JSON.parse(verifiedAccess);
+        
+        // Check if verification is for this event and not expired (e.g., 24 hours)
+        const isValid = verifiedEventId === eventId && 
+                       (new Date().getTime() - timestamp) < (24 * 60 * 60 * 1000);
+        
+        if (!isValid) {
+          // Invalid or expired verification, redirect to access page
+          navigate(`/events/${eventId}/access`);
+          return;
+        }
+
+        // If we reach here, access is verified
+        setHasAccess(true);
       } catch (err) {
-        console.error('Error fetching event:', err);
+        console.error('Error:', err);
         setError('Failed to load event details');
+        navigate(`/events/${eventId}/access`);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchEvent();
-  }, [eventId]);
+    fetchEventAndStatus();
+  }, [eventId, currentUser, navigate]);
 
   const handleJoinEvent = () => {
-    console.log('Joining event:', event.id);
+    setShowJoinForm(true);
   };
 
-  const ActionButton = ({ icon: Icon, label, onClick, disabled = false }) => (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`
-        flex items-center justify-center space-x-3
-        w-full px-6 py-4 rounded-xl
-        transition-all duration-200 ease-in-out
-        ${disabled 
-          ? 'bg-gray-50 text-gray-400 cursor-not-allowed' 
-          : `
-            bg-white text-gray-800
-            hover:bg-gray-50 hover:shadow-md
-            active:transform active:scale-[0.99]
-            border-2 border-gray-100
-          `
-        }
-      `}
-    >
-      <Icon className="h-6 w-6" />
-      <span className="font-medium text-base">{label}</span>
-      {disabled && (
-        <span className="text-xs bg-gray-200 px-2 py-1 rounded-full">Coming Soon</span>
-      )}
-    </button>
-  );
+  const handleViewGallery = () => {
+    navigate(`/events/${eventId}/gallery`);
+  };
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-    </div>
-  );
+  const handleUploadImages = () => {
+    navigate(`/events/${eventId}/upload`);
+  };
 
-  if (error) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-red-600">{error}</div>
-    </div>
-  );
+  if (loading || userStatus.loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-gray-600">Loading...</div>
+      </div>
+    );
+  }
 
-  if (!event) return null;
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-red-600">{error}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-100 to-white py-12">
-      <div className="max-w-2xl mx-auto">
-        {/* Main Content Card */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-4">
-          {/* Cover Image */}
-          <div className="relative w-full h-[300px]">
-            {event.coverImageUrl ? (
-              <img 
-                src={event.coverImageUrl} 
-                alt={event.name} 
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                <span className="text-gray-400">No cover image</span>
-              </div>
-            )}
-          </div>
+      <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
+        {/* Header with back button */}
+        <div className="px-4 py-3 flex justify-between items-center border-b bg-white">
+          <button 
+            onClick={() => navigate(-1)} 
+            className="text-black p-2"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+          </button>
+        </div>
 
-          <div className="p-6">
-            {/* Welcome Message */}
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-gray-900 mb-4">
-                Welcome to {event.name}!
-              </h1>
-              {event.welcomeMessage && (
-                <p className="text-lg text-gray-600">
-                  {event.welcomeMessage}
-                </p>
-              )}
+        {/* Cover Image */}
+        <div className="relative w-full h-[400px]">
+          {event?.coverImageUrl ? (
+            <img 
+              src={event.coverImageUrl} 
+              alt={event.name} 
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+              <span className="text-gray-400">No cover image</span>
+            </div>
+          )}          
+        </div>
+
+        <div className="p-6">
+          {/* Title */}
+          <h1 className="text-2xl font-bold text-gray-900">{event?.name}</h1>
+
+          {/* Description */}
+          <p className="text-gray-600 mt-4">{event?.description}</p>
+
+          {/* Event Details */}
+          <div className="space-y-6 mt-6">
+            {/* Location and Date */}
+            <div className="flex flex-col space-y-3">
+              <div className="flex items-center space-x-3">
+                <MapPinIcon className="h-6 w-6 text-gray-400" />
+                <span className="text-gray-600">{event?.location}</span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <CalendarIcon className="h-6 w-6 text-gray-400" />
+                <span className="text-gray-600">
+                  {event?.startTime && new Date(event.startTime).toLocaleDateString('en-US', {
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric'
+                  })}
+                </span>
+              </div>
             </div>
 
-            {/* Event Details */}
-            <div className="space-y-6">
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Event Details</h2>
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-3">
-                    <MapPinIcon className="h-6 w-6 text-gray-400" />
-                    <span className="text-gray-600">{event.location}</span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <CalendarIcon className="h-6 w-6 text-gray-400" />
-                    <span className="text-gray-600">
-                      {new Date(event.startTime).toLocaleDateString('en-US', {
-                        weekday: 'long',
-                        month: 'long',
-                        day: 'numeric',
-                        year: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit'
-                      })}
-                    </span>
-                  </div>
-                </div>
+            {/* Tags */}
+            {Array.isArray(event?.tags) && event.tags.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-4">
+                {event.tags.map((tag, index) => (
+                  <span 
+                    key={index}
+                    className="bg-gray-100 text-gray-600 text-sm px-3 py-1 rounded-full"
+                  >
+                    {tag}
+                  </span>
+                ))}
               </div>
+            )}
 
-              {/* Description */}
-              {event.description && (
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <h2 className="text-xl font-semibold text-gray-900 mb-4">About This Event</h2>
-                  <p className="text-gray-600 whitespace-pre-wrap">{event.description}</p>
-                </div>
-              )}
-
-              {/* Tags */}
-              {Array.isArray(event.tags) && event.tags.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {event.tags.map((tag, index) => (
-                    <span 
-                      key={index}
-                      className="bg-gray-100 text-gray-600 text-sm px-3 py-1 rounded-full"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Join Event Button - Centered */}
-              <div className="flex justify-center py-6">
+            {/* Join Button - Show if not creator and not attendee */}
+            {!userStatus.isCreator && !userStatus.isAttendee && (
+              <div className="flex justify-center pt-4">
                 <button
                   onClick={handleJoinEvent}
                   className="flex items-center justify-center space-x-2 px-8 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200 shadow-md hover:shadow-lg"
                 >
-                  <UserIcon className="h-5 w-5" />
+                  <UserPlusIcon className="h-5 w-5" />
                   <span className="font-medium">Join Event</span>
                 </button>
               </div>
+            )}
 
-              {/* Action Buttons */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Access Required Message - Show if no access */}
+            {!hasAccess && (
+              <div className="text-center py-6">
+                <p className="text-gray-600">
+                  Please verify your access to join this event.{' '}
+                  <button 
+                    onClick={() => navigate(`/events/${eventId}/access`)}
+                    className="text-indigo-600 hover:text-indigo-700 font-medium"
+                  >
+                    Verify Access
+                  </button>
+                </p>
+              </div>
+            )}
+
+            {/* Action Buttons - Only show if has access */}
+            {hasAccess && (
+              <div className="flex justify-center space-x-4 pt-4">
                 <button
-                  onClick={() => {}}
-                  disabled={true}
-                  className="flex items-center justify-center space-x-2 px-4 py-3 bg-white border-2 border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handleViewGallery}
+                  disabled={!userStatus.isCreator && !userStatus.isAttendee}
+                  className={`flex items-center space-x-2 px-6 py-3 rounded-lg transition-colors duration-200 ${
+                    userStatus.isCreator || userStatus.isAttendee
+                      ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md hover:shadow-lg'
+                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  }`}
                 >
                   <PhotoIcon className="h-5 w-5" />
-                  <span>View Gallery</span>
+                  <span className="font-medium">View Gallery</span>
                 </button>
+
                 <button
-                  onClick={() => {}}
-                  disabled={true}
-                  className="flex items-center justify-center space-x-2 px-4 py-3 bg-white border-2 border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handleUploadImages}
+                  disabled={!userStatus.isCreator && !userStatus.isAttendee}
+                  className={`flex items-center space-x-2 px-6 py-3 rounded-lg transition-colors duration-200 ${
+                    userStatus.isCreator || userStatus.isAttendee
+                      ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md hover:shadow-lg'
+                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  }`}
                 >
                   <ArrowUpTrayIcon className="h-5 w-5" />
-                  <span>Upload Photos</span>
+                  <span className="font-medium">Upload Images</span>
                 </button>
               </div>
+            )}
+
+            {/* Event Metadata */}
+            <div className="text-sm text-gray-500 space-y-1 pt-4 border-t">
+              <p>Created: {event?.createdAt?.toDate().toLocaleDateString()}</p>
+              <p>Last Updated: {event?.updatedAt?.toDate().toLocaleDateString()}</p>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Join Event Form Modal */}
+      {showJoinForm && (
+        <JoinEventForm
+          eventId={eventId}
+          onSubmit={async (attendeeData) => {
+            try {
+              await addAttendeeToEvent(eventId, attendeeData);
+              setUserStatus(prev => ({ ...prev, isAttendee: true }));
+              setShowJoinForm(false);
+            } catch (error) {
+              console.error('Error joining event:', error);
+            }
+          }}
+          onClose={() => setShowJoinForm(false)}
+          isOpen={showJoinForm}
+        />
+      )}
     </div>
   );
 }

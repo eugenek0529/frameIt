@@ -1,31 +1,74 @@
+// src/pages/MyEvents.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase/firebase.config';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { CalendarIcon, UserGroupIcon, MapPinIcon } from '@heroicons/react/24/outline';
 
 export default function MyEvents() {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
-  const [events, setEvents] = useState([]);
+  const [events, setEvents] = useState({
+    created: [],
+    attending: [],
+    past: []
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchUserEvents = async () => {
       try {
-        const eventsQuery = query(
-          collection(db, 'events'),
-          where('creatorId', '==', currentUser.uid)
-        );
+        setLoading(true);
+        
+        const userRef = doc(db, 'users', currentUser.uid);
+        const userDoc = await getDoc(userRef);
+        
+        if (!userDoc.exists()) {
+          throw new Error('User document not found');
+        }
 
-        const querySnapshot = await getDocs(eventsQuery);
-        const eventsData = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+        const userData = userDoc.data();
+        const myEvents = userData.myEvents || [];
+        const now = new Date();
 
-        setEvents(eventsData);
+        const createdEvents = [];
+        const attendingEvents = [];
+        const pastEvents = [];
+
+        // Get full event details for each event
+        for (const eventRef of myEvents) {
+          const eventDoc = await getDoc(doc(db, 'events', eventRef.eventId));
+          if (eventDoc.exists()) {
+            const eventData = {
+              id: eventDoc.id,
+              ...eventDoc.data(),
+              role: eventRef.role,
+              joinedAt: eventRef.joinedAt
+            };
+
+            const eventDate = new Date(eventData.startTime);
+            
+            // Sort into appropriate arrays based on date and role
+            if (eventDate < now) {
+              pastEvents.push(eventData);
+            } else if (eventRef.role === 'creator') {
+              createdEvents.push(eventData);
+            } else {
+              attendingEvents.push(eventData);
+            }
+          }
+        }
+
+        // Sort events by date
+        const sortByDate = (a, b) => new Date(a.startTime) - new Date(b.startTime);
+        
+        setEvents({
+          created: createdEvents.sort(sortByDate),
+          attending: attendingEvents.sort(sortByDate),
+          past: pastEvents.sort((a, b) => new Date(b.startTime) - new Date(a.startTime)) // Past events sorted newest first
+        });
       } catch (err) {
         console.error('Error fetching events:', err);
         setError('Failed to load events');
@@ -34,124 +77,126 @@ export default function MyEvents() {
       }
     };
 
-    fetchUserEvents();
+    if (currentUser) {
+      fetchUserEvents();
+    }
   }, [currentUser]);
 
-  const handleEventClick = (eventId) => {
-    navigate(`/events/${eventId}`);
+  const formatDate = (timestamp) => {
+    if (!timestamp) return 'Date not set';
+    const date = new Date(timestamp);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
   };
 
-  const getDaysRemaining = (startTime) => {
-    const today = new Date();
-    const eventDate = new Date(startTime);
-    const diffTime = eventDate - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-  };
+  const EventCard = ({ event }) => (
+    <div
+      onClick={() => navigate(`/events/${event.id}`)}
+      className="bg-white rounded-lg shadow hover:shadow-md transition-shadow cursor-pointer overflow-hidden flex h-32 w-full"
+    >
+      {/* Image Section */}
+      <div className="w-36 h-32 flex-shrink-0">
+        {event.coverImageUrl ? (
+          <img
+            src={event.coverImageUrl}
+            alt={event.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+            <span className="text-gray-400 text-sm">No image</span>
+          </div>
+        )}
+      </div>
 
-  const sortedEvents = events.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
-  const upcomingEvents = sortedEvents.filter(event => getDaysRemaining(event.startTime) >= 0);
-  const pastEvents = sortedEvents.filter(event => getDaysRemaining(event.startTime) < 0);
-
-  const EventCard = ({ event }) => {
-    const daysRemaining = getDaysRemaining(event.startTime);
-    const isUpcoming = daysRemaining >= 0;
-
-    return (
-      <div
-        onClick={() => handleEventClick(event.id)}
-        className="rounded-lg shadow-md overflow-hidden cursor-pointer transition transform hover:scale-105 bg-white bg-opacity-70 backdrop-filter backdrop-blur-md"
-      >
-        <div className="h-32 bg-gray-200">
-          {event.coverImageUrl ? (
-            <img
-              src={event.coverImageUrl}
-              alt={event.name}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-200 to-indigo-200 bg-opacity-50">
-              <span className="text-gray-500">No image</span>
-            </div>
-          )}
-        </div>
-        <div className="p-4">
-          <h3 className="font-semibold text-gray-800 mb-1 truncate">
-            {event.name}
-          </h3>
-          <p className="text-sm text-gray-600 mb-2">
-            {new Date(event.startTime).toLocaleDateString()}
-          </p>
-          <div className={`text-sm ${isUpcoming ? 'text-green-700' : 'text-red-700'}`}>
-            {isUpcoming
-              ? `${daysRemaining} days remaining`
-              : `${Math.abs(daysRemaining)} days ago`
-            }
+      {/* Content Section */}
+      <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
+        <div>
+          <div className="flex justify-between items-start gap-2">
+            <h3 className="font-semibold text-gray-900 truncate">{event.name}</h3>
+            <span className={`flex-shrink-0 text-xs px-2 py-1 rounded ${
+              event.role === 'creator' 
+                ? 'bg-indigo-100 text-indigo-800' 
+                : 'bg-green-100 text-green-800'
+            }`}>
+              {event.role === 'creator' ? 'Creator' : 'Attendee'}
+            </span>
+          </div>
+          
+          <div className="mt-1 flex items-center text-sm text-gray-500">
+            <CalendarIcon className="h-4 w-4 mr-1 flex-shrink-0" />
+            <span className="truncate">{formatDate(event.startTime)}</span>
           </div>
         </div>
-      </div>
-    );
-  };
 
-  if (loading) return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-100 to-white py-12">
-      <div className="max-w-6xl mx-auto px-4">
-        <div className="flex items-center justify-center">
-          <p className="text-lg text-gray-700">Loading your events...</p>
+        <div className="flex items-center justify-between text-sm text-gray-500">
+          <div className="flex items-center min-w-0 mr-2">
+            <MapPinIcon className="h-4 w-4 mr-1 flex-shrink-0" />
+            <span className="truncate">{event.location}</span>
+          </div>
+          <div className="flex items-center flex-shrink-0">
+            <UserGroupIcon className="h-4 w-4 mr-1" />
+            <span>{event.attendees?.length || 0}</span>
+          </div>
         </div>
       </div>
     </div>
   );
 
+  const EventSection = ({ title, events, emptyMessage }) => (
+    <div className="mb-8">
+      <h2 className="text-xl font-semibold text-gray-800 mb-4">{title}</h2>
+      {events.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {events.map((event) => (
+            <EventCard key={event.id} event={event} />
+          ))}
+        </div>
+      ) : (
+        <p className="text-gray-600">{emptyMessage}</p>
+      )}
+    </div>
+  );
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-gray-600">Loading your events...</div>
+    </div>
+  );
+
+  if (error) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-red-600">{error}</div>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-100 to-white py-12">
-      <div className="max-w-6xl mx-auto px-4">
-        {/* Header */}
-        <div className="mb-8 flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-gray-900">My Events</h1>
-          <button
-            onClick={() => navigate('/create')}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-full text-sm font-medium focus:outline-none focus:shadow-outline"
-          >
-            Create New Event
-          </button>
-        </div>
+    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">My Events</h1>
 
-        {/* Error Message */}
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 bg-opacity-80 backdrop-filter backdrop-blur-md">
-            {error}
-          </div>
-        )}
+      {/* Upcoming Events I Created */}
+      <EventSection
+        title="Events I Created"
+        events={events.created}
+        emptyMessage="You haven't created any events yet."
+      />
 
-        {/* Upcoming Events */}
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Upcoming Events</h2>
-          {upcomingEvents.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {upcomingEvents.map(event => (
-                <EventCard key={event.id} event={event} />
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-600">No upcoming events</p>
-          )}
-        </div>
+      {/* Upcoming Events I'm Attending */}
+      <EventSection
+        title="Events I'm Attending"
+        events={events.attending}
+        emptyMessage="You're not attending any upcoming events."
+      />
 
-        {/* Past Events */}
-        <div>
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Past Events</h2>
-          {pastEvents.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {pastEvents.map(event => (
-                <EventCard key={event.id} event={event} />
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-600">No past events</p>
-          )}
-        </div>
-      </div>
+      {/* Past Events */}
+      <EventSection
+        title="Past Events"
+        events={events.past}
+        emptyMessage="No past events."
+      />
     </div>
   );
 }
